@@ -1,3 +1,5 @@
+__author__ = "Harry"
+
 import psycopg2, psycopg2.extras
 import csv
 
