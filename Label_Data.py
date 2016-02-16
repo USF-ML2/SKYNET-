@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # this is a pyspark file, not python
 # functions in this file are meant to read the entire telematic data, and given one driver
 # produce a new RDD with 400 trips: 200 from original driver, labeled as '1' and sampled
@@ -12,12 +14,13 @@
 
 # note: these functions will output in the format: 'x, y, driverID, tripID, step, label'
 
-
 # import modules
 import numpy as np
 import os as os
 import re as re
 
+__author__ = "Su-Young Hong AKA Da Masta Killa AKA Synth Pop Rocks of Locks AKA Intergalactic Chilympian"
+__status__ = "Prototype"
 
 # read directory of files and return a list of all driverIDs from csv's insid directory
 def get_drivers(dirpath):
@@ -26,7 +29,7 @@ def get_drivers(dirpath):
     :return: list, contains all driverIDs as strings
     """
     try:
-        allfiles = os.listdir()
+        allfiles = os.listdir(dirpath)
         drivers = [re.sub(r'[^0-9]', '', i) for i in allfiles]
         return drivers
     except Exception as e:
@@ -49,6 +52,7 @@ def random_samples(targ_driv, driv_list, K=200):
         print e
 
 # reads directory of files and returns RDD of observations from trips in the sample (driverID, tripID combo)
+# NOTE: this function is VERY SLOW, it is what slows the entire workflow down
 def sample_data(path, driverIDs, tripIDs):
     """
     :param path: string, path to directory containing driver.csv's
@@ -58,12 +62,17 @@ def sample_data(path, driverIDs, tripIDs):
         sample
     :return: RDD, contains only observations from the sample
     """
-    combos = zip(driverIDs, tripIDs)
-    samplefiles = [path + '/' + i + '.csv' for i in driverIDs]
-    samplefiles = ','.join(samplefiles)
-    RDD = sc.textFile(samplefiles)
-    RDDsamples = RDD.filter(lambda x: (x[2],x[3]) in combos)
-    return RDDsamples
+    try:
+        combos = zip(driverIDs, tripIDs)
+        samplefiles = [path + '/' + 'driver_' + i + '.csv' for i in driverIDs]
+        samplefiles = ','.join(set(samplefiles))  #### NOTE: this set() action is a hack for small num. files
+        RDD = sc.textFile(samplefiles)   #### NOTE: with large num. files, might need to set num. partitions
+        RDDsplit = RDD.map(lambda x: x.split(','))
+        RDDsamples = RDDsplit.filter(lambda x: (x[2],x[3]) in combos)
+        RDDsamples.cache()
+        return RDDsamples
+    except Exception as e:
+        print e
 
 # takes RDD of samples and assigns new driverID and tripID to observations in a new RDD
 def ID_Data(targ_driver, RDD, K = 200):
@@ -74,18 +83,18 @@ def ID_Data(targ_driver, RDD, K = 200):
     :return: RDD, in original format, but with driverID and tripID changed to look like new observations of the target
     driver
     """
-    newID1 = [targ_driver] * K
-    newID2 = np.arange(200, 201+K).astype(str)
-    newID = zip(newID1, newID2)
-    oldID = RDD.map(lambda x: (x[2],x[3])).collect()
-    glossary = sc.parallelize(zip(oldID, newID))
-    newRDD = RDD.map(lambda x: ((x[2],x[3]), ([x[0],x[1],x[4]]))).join(glossary)
-    newID_RDD = newRDD.map(lambda x: (x[1][0][0], x[1][0][1], x[1][1][0], x[1][1][1], x[1][0][2]))
-    return newID_RDD
+    try:
+        newID1 = [targ_driver] * K
+        newID2 = np.arange(200, 201+K).astype(str)
+        newID = zip(newID1, newID2)
+        oldID = RDD.map(lambda x: (x[2],x[3])).distinct().collect()
+        glossary = sc.parallelize(zip(oldID, newID))
+        newRDD = RDD.map(lambda x: ((x[2],x[3]), ([x[0],x[1],x[4]]))).join(glossary)
+        newID_RDD = newRDD.map(lambda x: (x[1][0][0], x[1][0][1], x[1][1][0], x[1][1][1], x[1][0][2]))
+        return newID_RDD
+    except Exception as e:
+        print e
 
-####
-#### guys, should step be int and not float? ditto for label...
-####
 
 # takes RDD in original form and converts it into key-value tuple with values being x,y,step,label
 def processRDD(RDD, label):
@@ -96,9 +105,11 @@ def processRDD(RDD, label):
     :return: RDD, RDD returned in new key/value format: (driverID, tripID), (x, y, step, label)
     # note, x, y, step, and label will be floats
     """
-    newRDD = RDD.map(lambda x: ((x[2],x[3]),(float(x[0]),float(x[1]),float(x[4]),label)))
-    return newRDD
-
+    try:
+        newRDD = RDD.map(lambda x: ((x[2],x[3]),(float(x[0]),float(x[1]),float(x[4]),label)))
+        return newRDD
+    except Exception as e:
+        print e
 
 # takes a driver to target, path to directory of driver.csv's, and returns an RDD labeled with
 # (driverID, tripID),(x,y,step,label), where a label 1 is from an actual trip, and label 0 is from
@@ -110,21 +121,22 @@ def labelRDDs(targ_driv, path, K=200):
     :param K: int, number of negative (manufactured) trips to sample
     :return: RDD with key, value tuple where key is (driverID, tripID) and value is (x,y,step,label)
     """
-    target = sc.textFile(path + '/' + targ_driv + '.csv')
-    positives = processRDD(target, 1.0)
-    driv_list = get_drivers(path)
-    sampdriv, samptrip = random_samples(targ_driv, driv_list, K)
-    samples = sample_data(path, sampdriv, samptrip)
-    samplesRDD = ID_Data(targ_driv, samples, K)
-    negatives = processRDD(samplesRDD, 0.0)
-    finalRDD = positives.union(negatives)
-    return finalRDD
+    try:
+        target = sc.textFile(path + '/' + 'driver_' + targ_driv + '.csv') #load target driver's data
+        target2 = target.map(lambda x: x.split(',')) #convert from string to list of strings
+        positives = processRDD(target2, 1.0) #label target driver's RDD
+        driv_lis = get_drivers(path) #get python list of all possible drivers to sample from
+        sampdriv, samptrip = random_samples(targ_driv, driv_lis, K) #generate random samples of drivers and tripIDs
+        samples = sample_data(path, sampdriv, samptrip) #generate RDD of random samples
+        samplesRDD = ID_Data(targ_driv, samples, K) #relabel samples to look like target driver's trips
+        negatives = processRDD(samplesRDD, 0.0) #label samples
+        finalRDD = positives.union(negatives).cache() #join target driver and samples together
+        return finalRDD
+    except Exception as e:
+        print e
 
-
-"""     USE EXAMPLE
-
-path = '/Users/coolguy/Desktop/ML2Project/Data/drivers/1'
+"""
+path = '/Users/coolguy/Desktop/ML2Project/Data/processed_data/sample_drivers'
 driver = '1'
-DATA = labelRDDs(driver, path)
-
+newRDD = labelRDDs(driver, path)
 """
