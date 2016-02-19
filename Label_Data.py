@@ -136,7 +136,12 @@ def labelRDDs(targ_driv, path, K=200):
 	except Exception as e:
 		print e
 
+
 def vectorRDD(RDD):
+	"""
+	:param RDD: RDD, created from labelRDDs
+	"return: RDD with driver_id, trip_id, vectorized x and y coordinates, and label 
+	"""
 	vectorRDD = newRDD.map(lambda x: (x[0], ([x[1][0]], [x[1][1]], x[1][2], (x[1][3], 1))))\
 					  .reduceByKey(lambda x, y: (x[0] + y[0], x[1] + y[1]))\
 					  .map(lambda x: (x[0], (x[1][0], x[1][1], 1)) if int(x[0][1])\
@@ -161,22 +166,30 @@ vectorRDD.map(lambda x: (x[0], (zip(x[1][0], [0.0] + x[1][0][:-1]),
 
 
 def get_polars(RDD):
+	"""
+	:param RDD: RDD, created from vectorRDD
+	"return: RDD, same as vectorRDD but also with polar coordinates
+	"""
 	polars = RDD.map(lambda x: (x[0], (x[1][0], x[1][1], 
 								map(lambda x: (x[0] ** 2 + x[1] ** 2) ** 0.5, zip(x[1][0], x[1][1])),
-								map(lambda x: math.atan2(x[1], x[0]), zip(x[1][0], x[1][1])))))
+								map(lambda x: math.atan2(x[1], x[0]), zip(x[1][0], x[1][1]))), x[1][3]))
 	return polars
 
 
 def step_level_features(polarRDD):
+	"""
+	:param RDD: RDD, created from get_polars
+	:return: RDD with speed and acceleration at each stage of the trip
+	"""
 	newRDD = polarRDD.map(lambda x: (x[0], (x[1][0], x[1][1], x[1][2], x[1][3], 
 										  map(lambda x: (x[0] + x[1]) ** 0.5, 
 											  zip(map(lambda x: (x[0] - x[1]) ** 2, 
 													  zip(x[1][0], [0.0] + x[1][0][:-1])), 
 										  map(lambda x: (x[0] - x[1]) ** 2, 
-											  zip(x[1][1], [0.0] + x[1][1][:-1])))))))\
+											  zip(x[1][1], [0.0] + x[1][1][:-1]))))), x[2]))\
 					 .map(lambda x: (x[0], (x[1][0], x[1][1], x[1][2], x[1][3], x[1][4],
 											map(lambda x: x[0] - x[1], 
-												zip(x[1][4], [0.0] + x[1][4][:-1])))))
+												zip(x[1][4], [0.0] + x[1][4][:-1]))), x[2]))
 	return newRDD
 
 
