@@ -18,6 +18,7 @@
 import numpy as np
 import os as os
 import re as re
+import math
 
 __author__ = "Su-Young Hong AKA Da Masta Killa AKA Synth Pop Rocks of Locks AKA Intergalactic Chilympian"
 __status__ = "Prototype"
