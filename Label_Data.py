@@ -142,6 +142,22 @@ def vectorRDD(RDD):
 						   < 201 else (x[0], (x[1][0], x[1][1], 0)))
 	return vectorRDD
 
+# computes previous points of each x, y coordinate
+# computes distance in each x, y direction squared from previous point
+# computes euclidean distance from previous point (also speed as in m/s)
+# computes previous speed
+# computes speed difference (acceleration)
+# IF REDUCING A LIST OF TUPLES, MUST USE BOTH TUPLE ELEMENTS!!!
+vectorRDD.map(lambda x: (x[0], (zip(x[1][0], [0.0] + x[1][0][:-1]), 
+                                zip(x[1][1], [0.0] + x[1][1][:-1]))))\
+         .map(lambda x: (x[0], zip(map(lambda x: (x[0] - x[1]) ** 2, x[1][0]), 
+                                   map(lambda x: (x[0] - x[1]) ** 2, x[1][1]))))\
+         .map(lambda x: (x[0], map(lambda x: (x[0] + x[1]) ** 0.5, x[1])))\
+         .map(lambda x: (x[0], zip(x[1], [0.0] + x[1][:-1])))\
+         .map(lambda x: (x[0], map(lambda x: ([x[0]], [x[0] - x[1]]), x[1])))\
+         .map(lambda x: (x[0], reduce(lambda x, y: (x[0] + y[0], x[1] + y[1]), x[1])))\
+         .map(lambda x: (x[0], (min(x[1][0]), max(x[1][0]), min(x[1][1]), max(x[1][1]))))
+
 
 """
 path = '/Users/coolguy/Desktop/ML2Project/Data/processed_data/sample_drivers'
