@@ -19,6 +19,8 @@ import numpy as np
 import os as os
 import re as re
 import math
+from pyspark.mllib.classification import LogisticRegressionWithLBFGS, LogisticRegressionModel
+from pyspark.mllib.regression import LabeledPoint
 
 __author__ = "Su-Young Hong AKA Da Masta Killa AKA Synth Pop Rocks of Locks AKA Intergalactic Chilympian"
 __status__ = "Prototype"
@@ -191,6 +193,37 @@ def step_level_features(polarRDD):
 											map(lambda x: x[0] - x[1], 
 												zip(x[1][4], [0.0] + x[1][4][:-1]))), x[2]))
 	return newRDD
+
+
+def trip_level_features(RDD):  
+    """
+    :param RDD: RDD, created from step_level_features
+    :return: RDD with features, aggregated over the trip
+    """ 
+    trip_lv = RDD.map(lambda x: (x[0], (min(x[1][4]), max(x[1][4]), min(x[1][5]), max(x[1][5]), 
+                                        len(x[1][0]), sum(x[1][4]), np.mean(x[1][4]), np.std(x[1][4]), 
+                                        np.mean(x[1][5]), np.std(x[1][5]),
+                                        sum([elem < 0.5 for elem in x[1][4]])), x[2]))
+    return trip_lv
+
+def create_logistic_model(RDD):
+	"""
+	:param RDD: RDD, create from trip_level_features
+	"return: mllib logistic regression model
+	"""
+    label_pt = RDD.map(lambda x: LabeledPoint(x[2], x[1]))
+    model = LogisticRegressionWithLBFGS.train(label_pt)
+    return model
+
+
+def train_err(model):
+	"""
+	:param model: mllib logistic regresion model
+	:return: training error for model
+	"""
+	labelsAndPreds = label_pt.map(lambda x: (x.label, model.predict(x.features)))
+    trainErr = labelsAndPreds.filter(lambda (x, y): x != y).count() / float(label_pt.count())
+    return "Training Error = " + str(trainErr)
 
 
 """
