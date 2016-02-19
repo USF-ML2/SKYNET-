@@ -149,14 +149,34 @@ def vectorRDD(RDD):
 # computes speed difference (acceleration)
 # IF REDUCING A LIST OF TUPLES, MUST USE BOTH TUPLE ELEMENTS!!!
 vectorRDD.map(lambda x: (x[0], (zip(x[1][0], [0.0] + x[1][0][:-1]), 
-                                zip(x[1][1], [0.0] + x[1][1][:-1]))))\
-         .map(lambda x: (x[0], zip(map(lambda x: (x[0] - x[1]) ** 2, x[1][0]), 
-                                   map(lambda x: (x[0] - x[1]) ** 2, x[1][1]))))\
-         .map(lambda x: (x[0], map(lambda x: (x[0] + x[1]) ** 0.5, x[1])))\
-         .map(lambda x: (x[0], zip(x[1], [0.0] + x[1][:-1])))\
-         .map(lambda x: (x[0], map(lambda x: ([x[0]], [x[0] - x[1]]), x[1])))\
-         .map(lambda x: (x[0], reduce(lambda x, y: (x[0] + y[0], x[1] + y[1]), x[1])))\
-         .map(lambda x: (x[0], (min(x[1][0]), max(x[1][0]), min(x[1][1]), max(x[1][1]))))
+								zip(x[1][1], [0.0] + x[1][1][:-1]))))\
+		 .map(lambda x: (x[0], zip(map(lambda x: (x[0] - x[1]) ** 2, x[1][0]), 
+								   map(lambda x: (x[0] - x[1]) ** 2, x[1][1]))))\
+		 .map(lambda x: (x[0], map(lambda x: (x[0] + x[1]) ** 0.5, x[1])))\
+		 .map(lambda x: (x[0], zip(x[1], [0.0] + x[1][:-1])))\
+		 .map(lambda x: (x[0], map(lambda x: ([x[0]], [x[0] - x[1]]), x[1])))\
+		 .map(lambda x: (x[0], reduce(lambda x, y: (x[0] + y[0], x[1] + y[1]), x[1])))\
+		 .map(lambda x: (x[0], (min(x[1][0]), max(x[1][0]), min(x[1][1]), max(x[1][1]))))
+
+
+def get_polars(RDD):
+	polars = RDD.map(lambda x: (x[0], (x[1][0], x[1][1], 
+								map(lambda x: (x[0] ** 2 + x[1] ** 2) ** 0.5, zip(x[1][0], x[1][1])),
+								map(lambda x: math.atan2(x[1], x[0]), zip(x[1][0], x[1][1])))))
+	return polars
+
+
+def step_level_features(polarRDD):
+	newRDD = polarRDD.map(lambda x: (x[0], (x[1][0], x[1][1], x[1][2], x[1][3], 
+										  map(lambda x: (x[0] + x[1]) ** 0.5, 
+											  zip(map(lambda x: (x[0] - x[1]) ** 2, 
+													  zip(x[1][0], [0.0] + x[1][0][:-1])), 
+										  map(lambda x: (x[0] - x[1]) ** 2, 
+											  zip(x[1][1], [0.0] + x[1][1][:-1])))))))\
+					 .map(lambda x: (x[0], (x[1][0], x[1][1], x[1][2], x[1][3], x[1][4],
+											map(lambda x: x[0] - x[1], 
+												zip(x[1][4], [0.0] + x[1][4][:-1])))))
+	return newRDD
 
 
 """
