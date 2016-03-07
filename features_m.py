@@ -28,10 +28,10 @@ def vectorRDD(RDD):
     # [trip steps], label)). This RDD is the returned.
 
     vectorRDD = RDD.map(lambda x: (x[0], ([x[1][0]], [x[1][1]],
-        [x[1][2]])))\
-    .reduceByKey(lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2]))\
-    .map(lambda x: (x[0], (x[1][0], x[1][1], x[1][2], 1)) if int(x[0][1])\
-        < 201 else (x[0], (x[1][0], x[1][1], x[1][2], 0)))
+                                          [x[1][2]]))) \
+        .reduceByKey(lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2])) \
+        .map(lambda x: (x[0], (x[1][0], x[1][1], x[1][2], 1)) if int(x[0][1]) \
+                                                                 < 201 else (x[0], (x[1][0], x[1][1], x[1][2], 0)))
     return vectorRDD
 
 
@@ -50,16 +50,42 @@ def get_polars(RDD):
     #  y / x, i.e. the second inner map statement.
 
     polars = RDD.map(lambda x: (x[0], (x[1][0], x[1][1],
-        map(lambda x: (x[0] ** 2 + x[1] ** 2) ** 0.5, zip(x[1][0], x[1][1])),
-        map(lambda x: math.atan2(x[1], x[0]), zip(x[1][0], x[1][1])),
-         x[1][2], x[1][3])))
+                                       map(lambda x: (x[0] ** 2 + x[1] ** 2) ** 0.5, zip(x[1][0], x[1][1])),
+                                       map(lambda x: math.atan2(x[1], x[0]), zip(x[1][0], x[1][1])),
+                                       x[1][2], x[1][3])))
     return polars
+
+
+def ma(tseries, order):
+    """
+ 	:param tseries: list, a time series in which to computed a moving average
+    :param order: int, number of observations to average over
+    :return: list, a smoothed time series
+ 	"""
+
+    # initializes an empty list
+    smoothed = list()
+
+    # for each observation in the time series compute the average of the
+    # observation, the (order - 1) / 2 previous observations, and the
+    # (order - 1) / 2 following observations, for odd order, or the order / 2
+    # previous observations, and the order / 2 following observations, for even
+    # order, ignoring index errors
+    for i in range(len(tseries)):
+        try:
+            smoothed.append(sum([tseries[j] for j in range(i, i + order)]) /
+                            float(order))
+        except IndexError:
+            pass
+
+    return smoothed
 
 
 def step_level_features_map_function(row):
     """
     :param row: tuple, ((driver_id, trip_id), ([x coordinates],
-    	[y coordinates], [r coordinates], [theta coordinates], [step number],
+    [y coordinates], [r coordinates], [theta coordinates], [step number],
+
     	label))
     :return: tuple, ((driver_id, trip_id), ([x coordinates], [y coordinates],
     	[r coordinates], [theta coordinates], [vel coordinates],
@@ -76,10 +102,10 @@ def step_level_features_map_function(row):
 
     x2 = [(x_new - x_old) ** 2 for x_new, x_old in zip(x, [0.0] + x[:-1])]
     y2 = [(y_new - y_old) ** 2 for y_new, y_old in zip(y, [0.0] + y[:-1])]
-    vel = [(x_sq + y_sq) ** 0.5 for x_sq, y_sq in zip(x2, y2)]
+    vel = ma([(x_sq + y_sq) ** 0.5 for x_sq, y_sq in zip(x2, y2)], 10)
     acc = [v_new - v_old for v_new, v_old in zip(vel, [0.0] + vel[:-1])]
 
-    cent_acc =[0 if rad == 0 else v ** 2 / rad for rad, v in zip(r, vel)]
+    cent_acc = [0 if rad == 0 else v ** 2 / rad for rad, v in zip(r, vel)]
     ang_vel = [new - old for new, old in zip(theta, [0.0] + theta[:-1])]
     tan_acc = [new - old for new, old in zip(ang_vel, [0.0] + ang_vel[:-1])]
     jerk = [new - old for new, old in zip(acc, [0.0] + acc[:-1])]
@@ -116,7 +142,9 @@ def get_percentiles(vector):
     """
     Generates the percentiles for 5, 10, 15 ... 95 for a given vector
     """
-    return np.percentile(vector, range(5, 100, 10))
+    return np.percentile(vector, range(5, 100, 5))
+
+
 
 
 def trip_features(x):
@@ -130,25 +158,21 @@ def trip_features(x):
     """
     theta = x[1][3]
     v = x[1][4]
+
+    # Smaller smoothing interval for acceleration.
     a = x[1][5]
+    ang_vel = x[1][7]
+    tan_acc = x[1][8]
+    jerk = x[1][9]
 
-    ca = np.multiply(a,theta).tolist()
-    cv = np.multiply(v,theta).tolist()
-
-    a_pos = a[a>=0]
-    a_neg = a[a<0]
+    a_pos = a[a >= 0]
+    a_neg = a[a < 0]
 
     min_v = min(v)
     max_v = max(v)
 
     min_a = min(a)
     max_a = max(a)
-
-    min_ca = min(ca)
-    max_ca = max(ca)
-
-    min_cv = min(cv)
-    max_cv = max(cv)
 
     trip_length = len(x[1][0])
 
@@ -164,20 +188,29 @@ def trip_features(x):
     std_pos_a = np.mean(a_pos)
     std_neg_a = np.mean(a_neg)
 
+    mean_ang_vel = np.mean(ang_vel)
+    mean_tan_acc = np.mean(tan_acc)
+    mean_jerk = np.mean(jerk)
+
+    std_ang_vel = np.std(ang_vel)
+    std_tan_acc = np.std(tan_acc)
+    std_jerk = np.std(jerk)
+
     time_stop = sum([elem < 0.5 for elem in x[1][4]])
     label = x[1][11]
 
     numerical_features = (min_v, max_v,
-                   min_a, max_a,
-                   min_ca, max_ca,
-                   min_cv, max_cv,
-                   trip_length,
-                   mean_v, std_v,
-                   mean_a, std_a,
-                   mean_pos_a, std_pos_a,
-                   mean_neg_a, std_neg_a,
-                   time_stop,
-                   label)
+                          min_a, max_a,
+                          trip_length,
+                          mean_v, std_v,
+                          mean_a, std_a,
+                          mean_pos_a, std_pos_a,
+                          mean_neg_a, std_neg_a,
+                          mean_ang_vel, std_ang_vel,
+                          mean_tan_acc, std_tan_acc,
+                          mean_jerk, std_jerk,
+                          time_stop,
+                          label)
 
     v_percentiles = get_percentiles(v)
     a_percentiles = get_percentiles(a)
@@ -185,15 +218,18 @@ def trip_features(x):
     a_pos_percentiles = get_percentiles(a_pos)
     a_neg_percentiles = get_percentiles(a_neg)
 
-    ca_percentiles = get_percentiles(ca)
-    cv_percentiles = get_percentiles(cv)
+    #ang_vel_percentiles = get_percentiles()
+
+    #ca_percentiles = get_percentiles(ca)
+    #cv_percentiles = get_percentiles(cv)
 
     percentiles = np.append(v_percentiles, a_percentiles)
     percentiles = np.append(percentiles, a_pos_percentiles)
     percentiles = np.append(percentiles, a_neg_percentiles)
-    percentiles = np.append(percentiles, ca_percentiles)
-    percentiles = np.append(percentiles, cv_percentiles)
+    # percentiles = np.append(percentiles, ca_percentiles)
+    # percentiles = np.append(percentiles, cv_percentiles)
 
+    #second_tuple = numerical_features
     second_tuple = np.append(percentiles, numerical_features).tolist()
 
     return x[0], second_tuple
@@ -219,9 +255,9 @@ def trip_level_features(RDD):
 
 
 def create_labelled_vectors(x):
-     vector = list(x[1])
-     l = len(vector) -1
-     label = float(vector.pop(l))
-     return LabeledPoint(label, vector)
+    vector = list(x[1])
+    l = len(vector) - 1
+    label = float(vector.pop(l))
+    return LabeledPoint(label, vector)
 
 

@@ -19,8 +19,8 @@ def get_drivers(dirpath):
     """
 
     Read directory of files and return a list of all driverIDs from csv's insid directory
-    :@param dirpath: string, path to directory containing driver csv's
-    :@return: list, contains all driverIDs as strings
+    :param dirpath: string, path to directory containing driver csv's
+    :return: list, contains all driverIDs as strings
     """
 
     return all_drivers
@@ -28,13 +28,13 @@ def get_drivers(dirpath):
 
 def random_samples(targ_driv, driv_list, K=200):
     """
-    Produces random samples of driverIDs and tripIDs in two separate lists
+    Produces random samples of driverIDs and tripIDs i two separate lists
 
 
-    :@param targ_driv: str, driverID we want to make false trips for
-    :@param driv_list: list, list of all drivers, produced by get_drivers()
-    :@param K: number of trips we want to make for targ_driv
-    :@return: tuple of lists, first list is random driverIDs, second list is list of tripIDs, both are strings
+    :param targ_driv: str, driverID we want to make false trips for
+    :param driv_list: list, list of all drivers, produced by get_drivers()
+    :param K: number of trips we want to make for targ_driv
+    :return: tuple of lists, first list is random driverIDs, second list is list of tripIDs, both are strings
     """
     try:
         #removes the target driver from list of drivers to sample from
@@ -53,12 +53,12 @@ def sample_data(path, driverIDs, tripIDs, sc):
     (driverID, tripID combo)
     NOTE: this function is VERY SLOW, it is what slows the entire workflow down
 
-    :@param path: string, path to directory containing driver.csv's
-    :@param driverIDs: list, list of randomly sampled driverIDs as strings, produced by random_sample()
-    :@param tripIDs: list, list of randomly sampled tripIDs as strings, produced by random_samples()
+    :param path: string, path to directory containing driver.csv's
+    :param driverIDs: list, list of randomly sampled driverIDs as strings, produced by random_sample()
+    :param tripIDs: list, list of randomly sampled tripIDs as strings, produced by random_samples()
         NOTE: the above two zip into a list of (driverID, tripID) tuples, with each tuple being a single item in the
         sample
-    :@return: RDD, contains only observations from the sample
+    :return: RDD, contains only observations from the sample
     """
     try:
         combos = zip(driverIDs, tripIDs)
@@ -105,10 +105,10 @@ def processRDD(RDD, label):
     Takes RDD in original form and converts it into key-value tuple with values being x,y,step,label
 
 
-    :@param RDD: RDD in original format (x,y,driverID,tripID,step)
-    :@param label: category of observation, 1 for positive, 0 for negative
+    :param RDD: RDD in original format (x,y,driverID,tripID,step)
+    :param label: category of observation, 1 for positive, 0 for negative
     # note, not sure if it needs to be int or float
-    :@return: RDD, RDD returned in new key/value format: (driverID, tripID), (x, y, step, label)
+    :return: RDD, RDD returned in new key/value format: (driverID, tripID), (x, y, step, label)
     # note, x, y, step, and label will be floats
     """
     try:
@@ -123,11 +123,11 @@ def labelRDDs(targ_driv, path, sc, k=200):
     Takes a driver to target, path to directory of driver.csv's, and returns an RDD labeled with
     (driverID, tripID),(x,y,step,label), where a label 1 is from an actual trip, and label 0 is from
     a trip randomly sampled from other drivers
-    :@param targ_driv: string, driver we want to create positive and negative labeled data for
-    :@param path: string, path to directory where driver.csvs are stored
-    :@param k: int, number of negative (manufactured) trips to sample
-    :@param sc: Spark Context
-    :@return: RDD with key, value tuple where key is (driverID, tripID) and value is (x,y,step,label)
+    :param targ_driv: string, driver we want to create positive and negative labeled data for
+    :param path: string, path to directory where driver.csvs are stored
+    :param k: int, number of negative (manufactured) trips to sample
+    :param sc: Spark Context
+    :return: RDD with key, value tuple where key is (driverID, tripID) and value is (x,y,step,label)
     """
     try:
         full_path = path + '/' + 'driver_' + targ_driv + '.csv'
