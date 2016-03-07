@@ -3,12 +3,16 @@ __author__ = "su-young"
 import numpy as np
 import os as os
 import re as re
+import csv
 
 # Might need to hardcode list of drivers
 
 
-all_drivers = ["11", "14", "17", "13", "16", "18", "1", "12", "15", "10", "19",
-           "21", "2", "22", "23", "25", "20", "28", "27", "24", "30", "3", "26"]
+all_drivers = []
+with open('driver_nums.csv', 'r') as dn:
+    reader = csv.reader(dn, delimiter=',')
+    for r in reader:
+        all_drivers.append(str(r[0]))
 
 
 def get_drivers(dirpath):
@@ -18,13 +22,8 @@ def get_drivers(dirpath):
     :@param dirpath: string, path to directory containing driver csv's
     :@return: list, contains all driverIDs as strings
     """
-    try:
-        allfiles = os.listdir(dirpath)
-        drivers = [re.sub(r'[^0-9]', '', i) for i in allfiles]
-        drivers.remove('')
-        return drivers
-    except Exception as e:
-        print e
+
+    return all_drivers
 
 
 def random_samples(targ_driv, driv_list, K=200):

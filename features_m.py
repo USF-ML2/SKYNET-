@@ -56,9 +56,41 @@ def get_polars(RDD):
     return polars
 
 
+def step_level_features_map_function(row):
+    """
+    :param row: tuple, ((driver_id, trip_id), ([x coordinates],
+    	[y coordinates], [r coordinates], [theta coordinates], [step number],
+    	label))
+    :return: tuple, ((driver_id, trip_id), ([x coordinates], [y coordinates],
+    	[r coordinates], [theta coordinates], [vel coordinates],
+    	[acc coordinates], [cent_acc coordinates], [ang_vel coordinates],
+    	[tan_acc coordinates], [jerk coordinates], [step number], label))
+    """
+
+    x = row[1][0]
+    y = row[1][1]
+    r = row[1][2]
+    theta = row[1][3]
+    step = row[1][4]
+    label = row[1][5]
+
+    x2 = [(x_new - x_old) ** 2 for x_new, x_old in zip(x, [0.0] + x[:-1])]
+    y2 = [(y_new - y_old) ** 2 for y_new, y_old in zip(y, [0.0] + y[:-1])]
+    vel = [(x_sq + y_sq) ** 0.5 for x_sq, y_sq in zip(x2, y2)]
+    acc = [v_new - v_old for v_new, v_old in zip(vel, [0.0] + vel[:-1])]
+
+    cent_acc =[0 if rad == 0 else v ** 2 / rad for rad, v in zip(r, vel)]
+    ang_vel = [new - old for new, old in zip(theta, [0.0] + theta[:-1])]
+    tan_acc = [new - old for new, old in zip(ang_vel, [0.0] + ang_vel[:-1])]
+    jerk = [new - old for new, old in zip(acc, [0.0] + acc[:-1])]
+
+    return (row[0], (x, y, r, theta, vel, acc, cent_acc, ang_vel, tan_acc, jerk,
+                     step, label))
+
+
 def step_level_features(polarRDD):
     """
-    :param RDD: RDD, created from get_polars
+    :param polarRDD: RDD, created from get_polars
     :return: RDD with speed and acceleration at each stage of the trip
     """
 
@@ -75,33 +107,16 @@ def step_level_features(polarRDD):
     # which is computed as the difference between the current speed and the
     # previous speed
 
-    step_lv = polarRDD.map(lambda x: (x[0], (x[1][0], x[1][1], x[1][2],
-        x[1][3], map(lambda x: (x[0] + x[1]) ** 0.5,
-            zip(map(lambda x: (x[0] - x[1]) ** 2,
-            zip(x[1][0], [0.0] + x[1][0][:-1])),
-            map(lambda x: (x[0] - x[1]) ** 2,
-                zip(x[1][1], [0.0] + x[1][1][:-1])))), x[1][4], x[1][5])))\
-    .map(lambda x: (x[0], (x[1][0], x[1][1], x[1][2], x[1][3], x[1][4],
-        map(lambda x: x[0] - x[1],
-            zip(x[1][4], [0.0] + x[1][4][:-1])), x[1][5], x[1][6])))
+    step_lv = polarRDD.map(step_level_features_map_function)
 
     return step_lv
 
 
-def get_velocity_percentiles(row):
+def get_percentiles(vector):
     """
-    Generates the percentiles for 5, 10, 15 ... 95 for Velocity
+    Generates the percentiles for 5, 10, 15 ... 95 for a given vector
     """
-    v = row[1][4]
-    return np.percentile(v, range(5, 100, 5))
-
-
-def get_acceleration_percentiles(row):
-    """
-    Generates the percentiles for 5, 10, 15 ... 95 for Acceleration
-    """
-    a = row[1][5]
-    return np.percentile(a, range(5, 100, 5))
+    return np.percentile(vector, range(5, 100, 10))
 
 
 def trip_features(x):
@@ -113,31 +128,75 @@ def trip_features(x):
 
     :@param x:
     """
-    min_v = min(x[1][4])
-    max_v = max(x[1][4])
-    min_a = min(x[1][5])
-    max_a = max(x[1][5])
+    theta = x[1][3]
+    v = x[1][4]
+    a = x[1][5]
+
+    ca = np.multiply(a,theta).tolist()
+    cv = np.multiply(v,theta).tolist()
+
+    a_pos = a[a>=0]
+    a_neg = a[a<0]
+
+    min_v = min(v)
+    max_v = max(v)
+
+    min_a = min(a)
+    max_a = max(a)
+
+    min_ca = min(ca)
+    max_ca = max(ca)
+
+    min_cv = min(cv)
+    max_cv = max(cv)
+
     trip_length = len(x[1][0])
-    mean_v = np.mean(x[1][4])
-    std_v = np.std(x[1][4])
-    mean_a = np.mean(x[1][5])
-    std_a = np.std(x[1][5])
+
+    mean_v = np.mean(v)
+    std_v = np.std(v)
+
+    mean_a = np.mean(a)
+    std_a = np.std(a)
+
+    mean_pos_a = np.mean(a_pos)
+    mean_neg_a = np.mean(a_neg)
+
+    std_pos_a = np.mean(a_pos)
+    std_neg_a = np.mean(a_neg)
+
     time_stop = sum([elem < 0.5 for elem in x[1][4]])
-    label = x[1][7]
+    label = x[1][11]
 
     numerical_features = (min_v, max_v,
                    min_a, max_a,
+                   min_ca, max_ca,
+                   min_cv, max_cv,
                    trip_length,
                    mean_v, std_v,
                    mean_a, std_a,
+                   mean_pos_a, std_pos_a,
+                   mean_neg_a, std_neg_a,
                    time_stop,
                    label)
 
-    v_percentiles = get_velocity_percentiles(x)
-    a_percentiles = get_acceleration_percentiles(x)
+    v_percentiles = get_percentiles(v)
+    a_percentiles = get_percentiles(a)
+
+    a_pos_percentiles = get_percentiles(a_pos)
+    a_neg_percentiles = get_percentiles(a_neg)
+
+    ca_percentiles = get_percentiles(ca)
+    cv_percentiles = get_percentiles(cv)
+
     percentiles = np.append(v_percentiles, a_percentiles)
+    percentiles = np.append(percentiles, a_pos_percentiles)
+    percentiles = np.append(percentiles, a_neg_percentiles)
+    percentiles = np.append(percentiles, ca_percentiles)
+    percentiles = np.append(percentiles, cv_percentiles)
+
     second_tuple = np.append(percentiles, numerical_features).tolist()
-    return (x[0], second_tuple)
+
+    return x[0], second_tuple
 
 
 def trip_level_features(RDD):
@@ -158,8 +217,11 @@ def trip_level_features(RDD):
 
     return trip_lv
 
+
 def create_labelled_vectors(x):
      vector = list(x[1])
      l = len(vector) -1
      label = float(vector.pop(l))
      return LabeledPoint(label, vector)
+
+
