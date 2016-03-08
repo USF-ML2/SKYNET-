@@ -8,7 +8,7 @@ import csv
 from pyspark.sql import Row, SQLContext
 from pyspark.mllib.linalg import Vectors
 from pyspark.ml import Pipeline
-from pyspark.ml.classification import GBTClassifier
+from pyspark.ml.classification import GBTClassifier, RandomForestClassifier
 from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
 
@@ -17,15 +17,17 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClass
 #logFile = "/Users/mayankkedia/Downloads/spark-1.6.0-bin-hadoop2.6/README.md"
 sc = SparkContext(appName="GBT MODEL")
 #sc = SparkContext(pyFiles = ['/home/hadoop/features_m.py'])
-#AWS_ACCESS_KEY="AKIAICY6RQOLZF5NDSCA"
-#AWS_SECRET_ACCESS_KEY = "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"
 #sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY)
 #sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
 
 path = '/Users/mayankkedia/code/kaggle/axa_telematics/jsonsNEW/'
 #path = 's3://aml-spark-training/drivers/'
-drivers = ['1', '2', '3', '11', '12', '13', '14', '286', '1060', '1280', '2240']
+drivers = ['1', '2', '3', '11', '12', '13', '14', '286', '1060', '1280']
 
+versions = [{"version": 1.0, "smoothed": False, "percentiles": False},
+            {"version": 2.0, "smoothed": False, "percentiles": True},
+            {"version": 3.0, "smoothed": True, "percentiles": False},
+            {"version": 4.0, "smoothed": True, "percentiles": True}]
 
 errors = []
 
@@ -55,7 +57,7 @@ def create_rows_for_rdd(x):
     return Row(label=label, features=Vectors.dense(features), meta_data=Vectors.dense(meta_data))
 
 
-def create_feature_rdd(driver, path, sc):
+def create_feature_rdd(driver, path, sc, version):
     """
 
     :param driver:
@@ -64,54 +66,83 @@ def create_feature_rdd(driver, path, sc):
     :return:
     """
     driver_RDD = s.labelRDDs(driver, path, sc)
-    feature_RDD = fb.step_level_features(fb.get_polars(driver_RDD))
-    trip_features = fb.trip_level_features(feature_RDD)
+    feature_RDD = fb.step_level_features(fb.get_polars(driver_RDD), version["smoothed"])
+    #print "Printing Step Level Feature Return"
+    #print feature_RDD.take(1)
+    trip_features = fb.trip_level_features(feature_RDD, version["percentiles"])
+    #print "Printing Trip Level Feature Return"
+
+    #print trip_features.take(1)
     sqlContext = SQLContext(sc)
 
     total_data = sqlContext.createDataFrame(trip_features.map(create_rows_for_rdd))
     return total_data
 
 
-for driver in drivers:
+def calculate_accuracy_metrics(predictions, driver, version):
 
-    # Importing Data
+    metrics = {}
 
-    total_data = create_feature_rdd(driver, path, sc)
+    metrics["driver"] = driver
 
-    labelIndexer = StringIndexer(inputCol="label",
-                                 outputCol="indexedLabel").fit(total_data)
-
-    featureIndexer = VectorIndexer(inputCol="features",
-                                   outputCol="indexedFeatures",
-                                   maxCategories=4).fit(total_data)
-
-    (trainingData, testData) = total_data.randomSplit([0.7, 0.3])
-
-    gbt = GBTClassifier(labelCol="indexedLabel",
-                        featuresCol="indexedFeatures",
-                        maxIter=3)
-
-    pipeline = Pipeline(stages=[labelIndexer, featureIndexer, gbt])
-
-    model = pipeline.fit(trainingData)
-
-    predictions = model.transform(testData)
-
-    predictions.select("prediction", "indexedLabel", "features", "meta_data").show(20)
-
-    #evaluator = BinaryClassificationMetrics(rawPredictionCol="rawPrediction",
-    #                                        labelCol="indexedLabel")
-
+    #predictions.select("prediction", "indexedLabel", "features", "meta_data").show(20)
 
     evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel",
                                                   predictionCol="prediction")
     accuracy = round(evaluator.evaluate(predictions, {evaluator.metricName: "precision"}), 2)
-    print "Test Error for driver {} is {}".format(driver, 1.0 - accuracy)
 
-    recall = round(evaluator.evaluate(predictions, {evaluator.metricName: "recall"}), 2)
-    print "Percentage cases predicted as Not driver {} is {}".format(driver, 1 - recall)
+    print "Test Error for driver {} is {} for version {}".format(driver, 1.0 - accuracy, version["version"])
+
+    metrics["error_rate"] = 1.0-accuracy
+
+    metrics["version"] = version["version"]
+
     gbtModel = model.stages[2]
     print(gbtModel)  # summary only
+
+    return metrics
+
+
+for version in versions:
+    for driver in drivers:
+
+        # Importing Data
+
+        total_data = create_feature_rdd(driver, path, sc, version)
+
+        labelIndexer = StringIndexer(inputCol="label",
+                                     outputCol="indexedLabel").fit(total_data)
+
+        featureIndexer = VectorIndexer(inputCol="features",
+                                       outputCol="indexedFeatures",
+                                       maxCategories=4).fit(total_data)
+
+        (trainingData, testData) = total_data.randomSplit([0.7, 0.3])
+
+        gbt = GBTClassifier(labelCol="indexedLabel",
+                            featuresCol="indexedFeatures",
+                            maxIter=10)
+
+        pipeline = Pipeline(stages=[labelIndexer, featureIndexer, gbt])
+
+        model = pipeline.fit(trainingData)
+
+        predictions = model.transform(testData)
+
+        errors.append(calculate_accuracy_metrics(predictions, driver, version))
+
+
+with open('feature_selection.csv', 'a') as fp:
+    writer = csv.DictWriter(fp,
+                            fieldnames=["error_rate",
+                                        "driver",
+                                        "version"],
+                            delimiter=",")
+    writer.writeheader()
+    for e in errors:
+        writer.writerow(e)
+
+
 
 
 

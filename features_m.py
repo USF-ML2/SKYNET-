@@ -81,7 +81,7 @@ def ma(tseries, order):
     return smoothed
 
 
-def step_level_features_map_function(row):
+def step_level_features_map_function(row, smoothed=False):
     """
     :param row: tuple, ((driver_id, trip_id), ([x coordinates],
     [y coordinates], [r coordinates], [theta coordinates], [step number],
@@ -102,7 +102,13 @@ def step_level_features_map_function(row):
 
     x2 = [(x_new - x_old) ** 2 for x_new, x_old in zip(x, [0.0] + x[:-1])]
     y2 = [(y_new - y_old) ** 2 for y_new, y_old in zip(y, [0.0] + y[:-1])]
-    vel = ma([(x_sq + y_sq) ** 0.5 for x_sq, y_sq in zip(x2, y2)], 10)
+
+    # Smoothed !
+    if smoothed:
+        vel = ma([(x_sq + y_sq) ** 0.5 for x_sq, y_sq in zip(x2, y2)], 10)
+    else:
+        vel = [(x_sq + y_sq) ** 0.5 for x_sq, y_sq in zip(x2, y2)]
+
     acc = [v_new - v_old for v_new, v_old in zip(vel, [0.0] + vel[:-1])]
 
     cent_acc = [0 if rad == 0 else v ** 2 / rad for rad, v in zip(r, vel)]
@@ -114,7 +120,7 @@ def step_level_features_map_function(row):
                      step, label))
 
 
-def step_level_features(polarRDD):
+def step_level_features(polarRDD, smoothed=False):
     """
     :param polarRDD: RDD, created from get_polars
     :return: RDD with speed and acceleration at each stage of the trip
@@ -133,7 +139,7 @@ def step_level_features(polarRDD):
     # which is computed as the difference between the current speed and the
     # previous speed
 
-    step_lv = polarRDD.map(step_level_features_map_function)
+    step_lv = polarRDD.map(lambda x: step_level_features_map_function(x, smoothed))
 
     return step_lv
 
@@ -147,7 +153,7 @@ def get_percentiles(vector):
 
 
 
-def trip_features(x):
+def trip_features(x, percentiles=False):
     """
     Calculates the features of the trip from a row which is of the form
     ((driver_id, trip_id), ([x coordinates], [y coordinates],
@@ -156,11 +162,25 @@ def trip_features(x):
 
     :@param x:
     """
-    theta = x[1][3]
+    numerical_features = []
+
     v = x[1][4]
 
-    # Smaller smoothing interval for acceleration.
     a = x[1][5]
+
+    min_v = min(v)
+    max_v = max(v)
+
+
+    min_a = min(a)
+    max_a = max(a)
+
+    mean_v = np.mean(v)
+    std_v = np.std(v)
+
+    mean_a = np.mean(a)
+    std_a = np.std(a)
+
     ang_vel = x[1][7]
     tan_acc = x[1][8]
     jerk = x[1][9]
@@ -168,19 +188,9 @@ def trip_features(x):
     a_pos = a[a >= 0]
     a_neg = a[a < 0]
 
-    min_v = min(v)
-    max_v = max(v)
-
-    min_a = min(a)
-    max_a = max(a)
 
     trip_length = len(x[1][0])
 
-    mean_v = np.mean(v)
-    std_v = np.std(v)
-
-    mean_a = np.mean(a)
-    std_a = np.std(a)
 
     mean_pos_a = np.mean(a_pos)
     mean_neg_a = np.mean(a_neg)
@@ -211,6 +221,8 @@ def trip_features(x):
                           mean_jerk, std_jerk,
                           time_stop,
                           label)
+    if not percentiles:
+        return x[0], list(numerical_features)
 
     v_percentiles = get_percentiles(v)
     a_percentiles = get_percentiles(a)
@@ -218,24 +230,23 @@ def trip_features(x):
     a_pos_percentiles = get_percentiles(a_pos)
     a_neg_percentiles = get_percentiles(a_neg)
 
-    #ang_vel_percentiles = get_percentiles()
-
-    #ca_percentiles = get_percentiles(ca)
-    #cv_percentiles = get_percentiles(cv)
+    ang_vel_percentiles = get_percentiles(ang_vel)
+    tan_acc_percentiles = get_percentiles(tan_acc)
+    jerk_percentiles = get_percentiles(jerk)
 
     percentiles = np.append(v_percentiles, a_percentiles)
     percentiles = np.append(percentiles, a_pos_percentiles)
     percentiles = np.append(percentiles, a_neg_percentiles)
-    # percentiles = np.append(percentiles, ca_percentiles)
-    # percentiles = np.append(percentiles, cv_percentiles)
+    percentiles = np.append(percentiles, ang_vel_percentiles)
+    percentiles = np.append(percentiles, tan_acc_percentiles)
+    percentiles = np.append(percentiles, jerk_percentiles)
 
-    #second_tuple = numerical_features
     second_tuple = np.append(percentiles, numerical_features).tolist()
 
     return x[0], second_tuple
 
 
-def trip_level_features(RDD):
+def trip_level_features(RDD, percentiles=False):
     """
     :param RDD: RDD, created from step_level_features
     :return: RDD with features, aggregated over the trip
@@ -249,7 +260,7 @@ def trip_level_features(RDD):
     # they are computed per second. Length of time stopped is computed as the
     # number of seconds where the speed is less than 0.5 m/s.
 
-    trip_lv = RDD.map(trip_features)
+    trip_lv = RDD.map(lambda x: trip_features(x, percentiles))
 
     return trip_lv
 
