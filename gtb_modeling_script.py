@@ -5,13 +5,13 @@ import sampling_improved as s
 from pyspark import SparkContext
 from pyspark.mllib.tree import GradientBoostedTrees, GradientBoostedTreesModel, RandomForest
 import csv
+import random
 from pyspark.sql import Row, SQLContext
 from pyspark.mllib.linalg import Vectors
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import GBTClassifier, RandomForestClassifier
 from pyspark.ml.feature import StringIndexer, VectorIndexer
 from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClassificationEvaluator
-
 
 
 #logFile = "/Users/mayankkedia/Downloads/spark-1.6.0-bin-hadoop2.6/README.md"
@@ -22,7 +22,10 @@ sc = SparkContext(appName="GBT MODEL")
 
 path = '/Users/mayankkedia/code/kaggle/axa_telematics/jsonsNEW/'
 #path = 's3://aml-spark-training/drivers/'
-drivers = ['1', '2', '3', '11', '12', '13', '14', '286', '1060', '1280']
+#drivers = ['1', '2', '3', '11', '12', '13', '14', '286', '1060', '1280']
+
+driver_sample = [int(s.all_drivers[i].partition(".")[0]) for i in random.sample(xrange(len(s.all_drivers)), 100)]
+tree_num_range = range(5, 105, 5)
 
 versions = [{"version": 1.0, "smoothed": False, "percentiles": False},
             {"version": 2.0, "smoothed": False, "percentiles": True},
@@ -102,9 +105,10 @@ def calculate_accuracy_metrics(predictions, driver, version):
 
     return metrics
 
-
-for version in versions:
-    for driver in drivers:
+version = versions[1]
+#for version in versions:
+for num_tree in tree_num_range:
+    for driver in driver_sample:
 
         # Importing Data
 
@@ -121,7 +125,7 @@ for version in versions:
 
         gbt = GBTClassifier(labelCol="indexedLabel",
                             featuresCol="indexedFeatures",
-                            maxIter=10)
+                            maxIter=num_tree)
 
         pipeline = Pipeline(stages=[labelIndexer, featureIndexer, gbt])
 
