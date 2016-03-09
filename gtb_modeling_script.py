@@ -12,6 +12,7 @@ import sys
 
 errors = []
 
+
 #sc = SparkContext(appName="GBT MODEL",
 #                  pyFiles=['/home/hadoop/SKYNET-/features_m.py',
 #                           '/home/hadoop/SKYNET-/sampling_improved.py',
@@ -29,10 +30,13 @@ path = '/Users/mayankkedia/code/kaggle/axa_telematics/jsonsNEW/'
 
 #driver_sample = [int(s.all_drivers[i].partition(".")[0]) for i in random.sample(xrange(len(s.all_drivers)), 1)]
 driver_sample = [int(sys.argv[1])]
-tree_num_range = range(5, 105, 10)
+
+tree_num_range = range(5, 105, 20)
+
+FILENAME = "single_driver_hyperparameter_selection" + "_" + sys.argv[1] + ".csv"
 
 # Write Header for CSV File which records this information
-with open(util.FILENAME, 'a') as fp:
+with open(FILENAME, 'a') as fp:
     writer = csv.DictWriter(fp, fieldnames=util.CSV_FIELDNAMES, delimiter=",")
     writer.writeheader()
 
@@ -82,7 +86,7 @@ for version in util.versions:
             errors.append(accuracy_metrics)
 
             # Writing current model information to file
-            with open(util.FILENAME, 'a') as fp:
+            with open(FILENAME, 'a') as fp:
                 writer = csv.DictWriter(fp,
                                         fieldnames=util.CSV_FIELDNAMES,
                                         delimiter=",")
