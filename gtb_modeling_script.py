@@ -15,13 +15,14 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClass
 
 
 #logFile = "/Users/mayankkedia/Downloads/spark-1.6.0-bin-hadoop2.6/README.md"
-sc = SparkContext(appName="GBT MODEL")
-#sc = SparkContext(pyFiles = ['/home/hadoop/features_m.py'])
-#sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY)
-#sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
+sc = SparkContext(appName="GBT MODEL", pyFiles = ['/home/hadoop/SKYNET-/features_m.py','/home/hadoop/SKYNET-/sampling_improved.py' ])
+AWS_ACCESS_KEY='AKIAIXZCIKL5ZHV3TXBQ'
+AWS_SECRET_ACCESS_KEY = '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'
+sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY)
+sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
 
-path = '/Users/mayankkedia/code/kaggle/axa_telematics/jsonsNEW/'
-#path = 's3://aml-spark-training/drivers/'
+#path = '/Users/mayankkedia/code/kaggle/axa_telematics/jsonsNEW/'
+path = 's3://aml-spark-training/drivers.json/'
 #drivers = ['1', '2', '3', '11', '12', '13', '14', '286', '1060', '1280']
 
 driver_sample = [int(s.all_drivers[i].partition(".")[0]) for i in random.sample(xrange(len(s.all_drivers)), 100)]
@@ -134,7 +135,7 @@ for num_tree in tree_num_range:
 
         predictions = model.transform(testData)
 
-        errors.append(calculate_accuracy_metrics(predictions, driver, version))
+        errors.append(calculate_accuracy_metrics(predictions, driver, version, num_tree))
 
 
 with open('feature_selection.csv', 'a') as fp:
