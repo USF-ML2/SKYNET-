@@ -16,6 +16,7 @@ from pyspark.ml.evaluation import BinaryClassificationEvaluator, MulticlassClass
 
 #logFile = "/Users/mayankkedia/Downloads/spark-1.6.0-bin-hadoop2.6/README.md"
 sc = SparkContext(appName="GBT MODEL", pyFiles = ['/home/hadoop/SKYNET-/features_m.py','/home/hadoop/SKYNET-/sampling_improved.py' ])
+#sc = SparkContext(appName="GBT MODEL")
 AWS_ACCESS_KEY='AKIAIXZCIKL5ZHV3TXBQ'
 AWS_SECRET_ACCESS_KEY = '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'
 sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY)
@@ -94,20 +95,32 @@ def calculate_accuracy_metrics(predictions, driver, version, num_tree):
     evaluator = MulticlassClassificationEvaluator(labelCol="indexedLabel",
                                                   predictionCol="prediction")
     accuracy = round(evaluator.evaluate(predictions, {evaluator.metricName: "precision"}), 2)
+    recall = round(evaluator.evaluate(predictions, {evaluator.metricName: "recall"}), 2)
+
 
     print "Test Error for driver {} is {} for version {}".format(driver, 1.0 - accuracy, version["version"])
 
     metrics["error_rate"] = 1.0-accuracy
+    metrics["recall"] = recall
+
+    positive_cases = predictions.filter(predictions["indexedLabel"] == 1.0)
+    negative_cases = predictions.filter(predictions["indexedLabel"] == 0.0)
+    false_positive_cases = negative_cases.filter(positive_cases["prediction"] == 1.0)
+    false_negative_cases = positive_cases.filter(positive_cases["prediction"] == 0.0)
 
     metrics["version"] = version["version"]
     metrics["num_trees"] = num_tree
+    metrics["pos_cases"] = positive_cases.count()
+    metrics["neg_cases"] = negative_cases.count()
+    metrics["fp_cases"] = false_positive_cases.count()
+    metrics["fn_cases"] = false_negative_cases.count()
 
     gbtModel = model.stages[2]
     print(gbtModel)  # summary only
 
     return metrics
 
-version = versions[1]
+version = versions[3]
 #for version in versions:
 for num_tree in tree_num_range:
     for driver in driver_sample:
@@ -143,7 +156,12 @@ with open('feature_selection.csv', 'a') as fp:
                             fieldnames=["error_rate",
                                         "driver",
                                         "version",
-                                        "num_trees"],
+                                        "num_trees",
+                                        "recall",
+                                        "pos_cases",
+                                        "neg_cases",
+                                        "fp_cases",
+                                        "fn_cases"],
                             delimiter=",")
     writer.writeheader()
     for e in errors:
