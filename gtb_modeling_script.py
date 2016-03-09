@@ -82,7 +82,7 @@ def create_feature_rdd(driver, path, sc, version):
     return total_data
 
 
-def calculate_accuracy_metrics(predictions, driver, version):
+def calculate_accuracy_metrics(predictions, driver, version, num_tree):
 
     metrics = {}
 
@@ -99,6 +99,7 @@ def calculate_accuracy_metrics(predictions, driver, version):
     metrics["error_rate"] = 1.0-accuracy
 
     metrics["version"] = version["version"]
+    metrics["num_trees"] = num_tree
 
     gbtModel = model.stages[2]
     print(gbtModel)  # summary only
@@ -140,7 +141,8 @@ with open('feature_selection.csv', 'a') as fp:
     writer = csv.DictWriter(fp,
                             fieldnames=["error_rate",
                                         "driver",
-                                        "version"],
+                                        "version",
+                                        "num_trees"],
                             delimiter=",")
     writer.writeheader()
     for e in errors:
