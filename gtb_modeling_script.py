@@ -44,13 +44,15 @@ with open(FILENAME, 'a') as fp:
 
 """ MODELING ITERATIONS BEGIN HERE """
 
-for version in util.versions:
-    for num_tree in tree_num_range:
-        for driver in driver_sample:
+for driver in driver_sample:
+
+    driver_RDD = s.labelRDDs(driver=driver, path=path, sc=sc)
+    for version in util.versions:
+        total_data = util.create_feature_rdd(driver_RDD, sc, version, s)
+        for num_tree in tree_num_range:
 
             # Importing Data
 
-            total_data = util.create_feature_rdd(driver, path, sc, version, s)
 
             labelIndexer = StringIndexer(inputCol="label",
                                          outputCol="indexedLabel").fit(total_data)

@@ -44,7 +44,7 @@ def create_rows_for_rdd(x):
                meta_data=Vectors.dense(meta_data))
 
 
-def create_feature_rdd(driver, path, sc, version, s):
+def create_feature_rdd(driver_RDD, sc, version, s):
     """
 
     :param driver:
@@ -52,13 +52,14 @@ def create_feature_rdd(driver, path, sc, version, s):
     :param sc:
     :return:
     """
-    driver_RDD = s.labelRDDs(driver, path, sc)
+    #driver_RDD = s.labelRDDs(driver, path, sc)
     feature_RDD = fb.step_level_features(fb.get_polars(driver_RDD), version["smoothed"])
     trip_features = fb.trip_level_features(feature_RDD, version["percentiles"])
     sqlContext = SQLContext(sc)
 
     total_data = sqlContext.createDataFrame(trip_features.map(create_rows_for_rdd))
     return total_data
+
 
 
 def calculate_accuracy_metrics(predictions):
