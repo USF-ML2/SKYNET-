@@ -40,8 +40,6 @@ with open(FILENAME, 'a') as fp:
     writer = csv.DictWriter(fp, fieldnames=util.CSV_FIELDNAMES, delimiter=",")
     writer.writeheader()
 
-
-
 """ MODELING ITERATIONS BEGIN HERE """
 
 for driver in driver_sample:
@@ -49,61 +47,55 @@ for driver in driver_sample:
     driver_RDD = s.labelRDDs(driver=driver, path=path, sc=sc)
     for version in util.versions:
         total_data = util.create_feature_rdd(driver_RDD, sc, version, s)
+        labelIndexer = StringIndexer(inputCol="label",
+                                     outputCol="indexedLabel").fit(total_data)
+        featureIndexer = VectorIndexer(inputCol="features",
+                                       outputCol="indexedFeatures",
+                                       maxCategories=4).fit(total_data)
+
+        (trainingData, testData) = total_data.randomSplit([0.7, 0.3])
+
+        """
+        splits = total_data.randomSplit([0.2]*5)
+        for i, split in enumerate(splits):
+            trainingData = None
+            testData = splits[i]
+            for j in range(5):
+                if j != i:
+                    if trainingData is None:
+                        trainingData = splits[j]
+                    else:
+                        trainingData = trainingData.unionAll(splits[j])
+        """
         for num_tree in tree_num_range:
-            # Importing Data
 
-            labelIndexer = StringIndexer(inputCol="label",
-                                         outputCol="indexedLabel").fit(total_data)
+            # Modeling using GBT Classifier
+            gbt = GBTClassifier(labelCol="indexedLabel",
+                                featuresCol="indexedFeatures",
+                                maxIter=num_tree)
 
-            featureIndexer = VectorIndexer(inputCol="features",
-                                           outputCol="indexedFeatures",
-                                           maxCategories=4).fit(total_data)
+            pipeline = Pipeline(stages=[labelIndexer,
+                                        featureIndexer,
+                                        gbt])
 
+            model = pipeline.fit(trainingData)
 
-            # Splitting Data into TEST/TRAIN
+            tr_p = model.transform(trainingData)
+            te_p = model.transform(testData)
 
-            # Preparing for 5 fold cross validation
-            splits = total_data.randomSplit([0.2]*5)
+            accuracy_metrics = util.create_metric_dictionary(test_predictions=te_p,
+                                                             training_predictions=tr_p,
+                                                             driver=driver,
+                                                             version=version,
+                                                             num_tree=num_tree,
+                                                             cv=i)
+            errors.append(accuracy_metrics)
 
-
-            for i, split in enumerate(splits):
-                trainingData = None
-                testData = splits[i]
-                for j in range(5):
-                    if j != i:
-                        if trainingData is None:
-                            trainingData = splits[j]
-                        else:
-                            trainingData = trainingData.unionAll(splits[j])
-
-
-                # Modeling using GBT Classifier
-                gbt = GBTClassifier(labelCol="indexedLabel",
-                                    featuresCol="indexedFeatures",
-                                    maxIter=num_tree)
-
-                pipeline = Pipeline(stages=[labelIndexer,
-                                            featureIndexer,
-                                            gbt])
-
-                model = pipeline.fit(trainingData)
-
-                tr_p = model.transform(trainingData)
-                te_p = model.transform(testData)
-
-                accuracy_metrics = util.create_metric_dictionary(test_predictions=te_p,
-                                                                 training_predictions=tr_p,
-                                                                 driver=driver,
-                                                                 version=version,
-                                                                 num_tree=num_tree,
-                                                                 cv=i)
-                errors.append(accuracy_metrics)
-
-                # Writing current model information to file
-                with open(FILENAME, 'a') as fp:
-                    writer = csv.DictWriter(fp,
-                                            fieldnames=util.CSV_FIELDNAMES,
-                                            delimiter=",")
-                    writer.writerow(accuracy_metrics)
+            # Writing current model information to file
+            with open(FILENAME, 'a') as fp:
+                writer = csv.DictWriter(fp,
+                                        fieldnames=util.CSV_FIELDNAMES,
+                                        delimiter=",")
+                writer.writerow(accuracy_metrics)
 
 
