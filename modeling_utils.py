@@ -44,7 +44,7 @@ def create_rows_for_rdd(x):
                meta_data=Vectors.dense(meta_data))
 
 
-def create_feature_rdd(driver, path, sc, version):
+def create_feature_rdd(driver, path, sc, version, s):
     """
 
     :param driver:

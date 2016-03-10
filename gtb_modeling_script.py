@@ -13,20 +13,20 @@ import sys
 errors = []
 
 
-#sc = SparkContext(appName="GBT MODEL",
-#                  pyFiles=['/home/hadoop/SKYNET-/features_m.py',
-#                           '/home/hadoop/SKYNET-/sampling_improved.py',
-#                           '/home/hadoop/SKYNET-/modeling_utils.py'])
+sc = SparkContext(appName="GBT MODEL",
+                  pyFiles=['/home/hadoop/SKYNET-/features_m.py',
+                           '/home/hadoop/SKYNET-/sampling_improved.py',
+                           '/home/hadoop/SKYNET-/modeling_utils.py'])
 
-sc = SparkContext(appName="GBT MODEL")
+#sc = SparkContext(appName="GBT MODEL")
 
 AWS_ACCESS_KEY = 'AKIAIXZCIKL5ZHV3TXBQ'
 AWS_SECRET_ACCESS_KEY = '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'
-#sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY)
-#sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
+sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY)
+sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
 
-path = '/Users/mayankkedia/code/kaggle/axa_telematics/jsonsNEW/'
-#path = 's3://aml-spark-training/drivers.json/'
+#path = '/Users/mayankkedia/code/kaggle/axa_telematics/jsonsNEW/'
+path = 's3://aml-spark-training/drivers.json/'
 
 #driver_sample = [int(s.all_drivers[i].partition(".")[0]) for i in random.sample(xrange(len(s.all_drivers)), 1)]
 driver_sample = [int(sys.argv[1])]
@@ -50,7 +50,7 @@ for version in util.versions:
 
             # Importing Data
 
-            total_data = util.create_feature_rdd(driver, path, sc, version)
+            total_data = util.create_feature_rdd(driver, path, sc, version, s)
 
             labelIndexer = StringIndexer(inputCol="label",
                                          outputCol="indexedLabel").fit(total_data)
