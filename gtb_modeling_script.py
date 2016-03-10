@@ -13,20 +13,20 @@ import sys
 errors = []
 
 
-sc = SparkContext(appName="GBT MODEL",
-                  pyFiles=['/home/hadoop/SKYNET-/features_m.py',
-                           '/home/hadoop/SKYNET-/sampling_improved.py',
-                           '/home/hadoop/SKYNET-/modeling_utils.py'])
+#sc = SparkContext(appName="GBT MODEL",
+#                  pyFiles=['/home/hadoop/SKYNET-/features_m.py',
+#                           '/home/hadoop/SKYNET-/sampling_improved.py',
+#                           '/home/hadoop/SKYNET-/modeling_utils.py'])
 
-#sc = SparkContext(appName="GBT MODEL")
+sc = SparkContext(appName="GBT MODEL")
 
 AWS_ACCESS_KEY = 'AKIAIXZCIKL5ZHV3TXBQ'
 AWS_SECRET_ACCESS_KEY = '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'
-sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY)
-sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
+#sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY)
+#sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
 
-#path = '/Users/mayankkedia/code/kaggle/axa_telematics/jsonsNEW/'
-path = 's3://aml-spark-training/drivers.json/'
+path = '/Users/mayankkedia/code/kaggle/axa_telematics/jsonsNEW/'
+#path = 's3://aml-spark-training/drivers.json/'
 
 #driver_sample = [int(s.all_drivers[i].partition(".")[0]) for i in random.sample(xrange(len(s.all_drivers)), 1)]
 driver_sample = [int(sys.argv[1])]
@@ -50,9 +50,7 @@ for driver in driver_sample:
     for version in util.versions:
         total_data = util.create_feature_rdd(driver_RDD, sc, version, s)
         for num_tree in tree_num_range:
-
             # Importing Data
-
 
             labelIndexer = StringIndexer(inputCol="label",
                                          outputCol="indexedLabel").fit(total_data)
@@ -64,34 +62,48 @@ for driver in driver_sample:
 
             # Splitting Data into TEST/TRAIN
 
-            (trainingData, testData) = total_data.randomSplit([0.7, 0.3])
+            # Preparing for 5 fold cross validation
+            splits = total_data.randomSplit([0.2]*5)
 
-            # Modeling using GBT Classifier
-            gbt = GBTClassifier(labelCol="indexedLabel",
-                                featuresCol="indexedFeatures",
-                                maxIter=num_tree)
 
-            pipeline = Pipeline(stages=[labelIndexer,
-                                        featureIndexer,
-                                        gbt])
+            for i, split in enumerate(splits):
+                trainingData = None
+                testData = splits[i]
+                for j in range(5):
+                    if j != i:
+                        if trainingData is None:
+                            trainingData = splits[j]
+                        else:
+                            trainingData = trainingData.unionAll(splits[j])
 
-            model = pipeline.fit(trainingData)
 
-            tr_p = model.transform(trainingData)
-            te_p = model.transform(testData)
+                # Modeling using GBT Classifier
+                gbt = GBTClassifier(labelCol="indexedLabel",
+                                    featuresCol="indexedFeatures",
+                                    maxIter=num_tree)
 
-            accuracy_metrics = util.create_metric_dictionary(test_predictions=te_p,
-                                                             training_predictions=tr_p,
-                                                             driver=driver,
-                                                             version=version,
-                                                             num_tree=num_tree)
-            errors.append(accuracy_metrics)
+                pipeline = Pipeline(stages=[labelIndexer,
+                                            featureIndexer,
+                                            gbt])
 
-            # Writing current model information to file
-            with open(FILENAME, 'a') as fp:
-                writer = csv.DictWriter(fp,
-                                        fieldnames=util.CSV_FIELDNAMES,
-                                        delimiter=",")
-                writer.writerow(accuracy_metrics)
+                model = pipeline.fit(trainingData)
+
+                tr_p = model.transform(trainingData)
+                te_p = model.transform(testData)
+
+                accuracy_metrics = util.create_metric_dictionary(test_predictions=te_p,
+                                                                 training_predictions=tr_p,
+                                                                 driver=driver,
+                                                                 version=version,
+                                                                 num_tree=num_tree,
+                                                                 cv=i)
+                errors.append(accuracy_metrics)
+
+                # Writing current model information to file
+                with open(FILENAME, 'a') as fp:
+                    writer = csv.DictWriter(fp,
+                                            fieldnames=util.CSV_FIELDNAMES,
+                                            delimiter=",")
+                    writer.writerow(accuracy_metrics)
 
 

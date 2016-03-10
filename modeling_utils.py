@@ -24,7 +24,7 @@ TRAIN_METRIC_FIELD = {"train_precision": 0,
                       "train_fp_count": 4,
                       "train_fn_count": 5}
 
-METRIC_FIELDS = ["driver", "num_trees", "version"]
+METRIC_FIELDS = ["driver", "num_trees", "version", "heldout_set"]
 
 CSV_FIELDNAMES = METRIC_FIELDS + TEST_METRIC_FIELDS.keys() + TRAIN_METRIC_FIELD.keys()
 
@@ -88,18 +88,20 @@ def calculate_accuracy_metrics(predictions):
             false_negative_cases.count()]
 
 
-def create_metric_dictionary(test_predictions, training_predictions, driver, version, num_tree):
+def create_metric_dictionary(test_predictions, training_predictions, driver, version, num_tree, cv):
     """
     Creates a dict with important metrics for this round of modeling
     :param test_predictions:
     :param training_predictions:
     :param driver:
+    :param cv: which is the held out set for modeling
     """
 
     metrics = dict()
     metrics["driver"] = driver
     metrics["version"] = version["version"]
     metrics["num_trees"] = num_tree
+    metrics["heldout_set"] = cv
 
     pred_stats = calculate_accuracy_metrics(test_predictions)
     for k in TEST_METRIC_FIELDS.keys():
