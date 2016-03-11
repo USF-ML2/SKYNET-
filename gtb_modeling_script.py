@@ -20,8 +20,6 @@ sc = SparkContext(appName="GBT MODEL",
 
 #sc = SparkContext(appName="GBT MODEL")
 
-AWS_ACCESS_KEY = 'AKIAIXZCIKL5ZHV3TXBQ'
-AWS_SECRET_ACCESS_KEY = '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'
 sc._jsc.hadoopConfiguration().set("fs.s3n.awsAccessKeyId", AWS_ACCESS_KEY)
 sc._jsc.hadoopConfiguration().set("fs.s3n.awsSecretAccessKey", AWS_SECRET_ACCESS_KEY)
 
