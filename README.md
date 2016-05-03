@@ -12,10 +12,29 @@ We used PySpark for the project
 
 ## Data 
 
-We had data for about 3500 drivers. For each driver there were 200 files containing telematic data for 200 trips with X,Y coordinates in every line. 
+We had data for about 3500 drivers. For each driver there were 200 files containing telematic data for 200 trips with X,Y coordinates in every line. The dataset was such that a percentage of these 200 trips (< 50%) for each driver actually belonged to someone else. 
+
+So this was an unsupervised learning problem. Since the competition was closed and there was no leaderboard to test our solutions against. We had to construct a supervised learning problem out of this dataset. This was a reasonable approach because most participants had done something like this to test their models while the competition was going on. They reported that the accuracy on the original unsupervised learning problem was very close to a constructed supervised learning problem.
+
+## Constructing a supervised learning problem
+
+This is what we did to construct a supervised learning problem
+- Model one driver at a time (since the problem is to find out which trips do not belong to a driver)
+- Take 100 trips from a driver and 100 trips randomly from all other drivers to construct a training set of 200 trips
+- Train a classification algorithm on this data
+- Run the model on the Test set (the remaining 100 trips) and those trips which come up as false negatives are then labelled as trips which do not actually belong to the driver
+- Do this for the other 100 trips in the Training set by re-training the model
 
 
+## Challenges
+
+- 3500 different models (One for each driver)
+- Feature generation in spark from the original dataset 
+- Spark configurations for handling the volume of data
 
 
+## Results
+
+- We ended up using Generalized Boosting Trees as our classification algorithm
 
 
